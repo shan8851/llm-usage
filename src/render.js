@@ -80,6 +80,34 @@ export function renderProviderTotalsTable(totals) {
   return table.toString();
 }
 
+export function renderSummaryTable(summary) {
+  const table = new Table({
+    head: ['Scope', 'Models', 'Sessions', 'Turns', 'In', 'Out', 'Total', 'Cached', 'Reasoning'],
+    style: { head: ['yellow'], border: ['grey'] },
+    colAligns: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+  });
+
+  table.push([
+    'selected',
+    formatNumber(summary.models),
+    formatNumber(summary.sessions),
+    formatNumber(summary.turns),
+    formatCompact(summary.tokens_in),
+    formatCompact(summary.tokens_out),
+    formatCompact(summary.tokens_total),
+    formatCompact(summary.cached_tokens),
+    formatCompact(summary.reasoning_tokens),
+  ]);
+
+  return table.toString();
+}
+
+export function formatMetricValue(metric, summary, compact = true) {
+  const n = Number(summary?.[metric] || 0);
+  if (compact) return formatCompact(n);
+  return formatNumber(n);
+}
+
 export function renderOpenRouterBlock(orData) {
   if (!orData) return null;
 
@@ -97,6 +125,7 @@ export function renderOpenRouterBlock(orData) {
   if (orData.missingApiKey) {
     table.push(['status', `missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`]);
     table.push(['hint', `export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`]);
+    table.push(['note', 'model/token breakdown not available from public key/credits endpoints']);
     return `\n${table.toString()}`;
   }
 
@@ -127,6 +156,8 @@ export function renderOpenRouterBlock(orData) {
   if (table.length === 0) {
     table.push(['status', 'no data returned']);
   }
+
+  table.push(['note', 'model/token breakdown not available from public key/credits endpoints']);
 
   return `\n${table.toString()}`;
 }

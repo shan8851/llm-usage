@@ -71,6 +71,10 @@ llm-usage --from 7d
 llm-usage --provider claude
 llm-usage --provider codex --model gpt-5
 llm-usage --sort sessions --max-rows 20
+llm-usage --totals-only
+llm-usage --metric tokens_total
+llm-usage --metric tokens_total --value-only
+llm-usage --provider codex --metric tokens_out --value-only
 llm-usage --json
 ```
 
@@ -82,6 +86,9 @@ llm-usage --json
 - `--to <time>` `now` or ISO date/time
 - `--sort <field>` `tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model`
 - `--max-rows <n>` max output rows (default `50`)
+- `--metric <metric>` one metric (`tokens_total|tokens_in|tokens_out|sessions|turns|cached_tokens|reasoning_tokens|models`)
+- `--value-only` print only the metric value (requires `--metric`)
+- `--totals-only` print one compact totals table for selected scope
 - `--json` machine-friendly output
 - `--config <path>` custom config file path
 - `--no-openrouter` skip OpenRouter lookup
@@ -120,6 +127,8 @@ Set API key for OpenRouter:
 ```bash
 export OPENROUTER_API_KEY="..."
 ```
+
+OpenRouter currently exposes key/credit-level data on public endpoints; model/token breakdown is not available from `/key` + `/credits`.
 
 ---
 

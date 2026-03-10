@@ -90,3 +90,32 @@ export function providerTotals(rows) {
     }))
     .sort((a, b) => b.tokens_out - a.tokens_out);
 }
+
+export function summarizeRows(rows) {
+  const sessionSet = new Set();
+
+  const summary = {
+    models: rows.length,
+    sessions: 0,
+    turns: 0,
+    tokens_in: 0,
+    tokens_out: 0,
+    tokens_total: 0,
+    cached_tokens: 0,
+    reasoning_tokens: 0,
+  };
+
+  for (const row of rows) {
+    for (const sid of row.session_ids || []) sessionSet.add(sid);
+    summary.turns += Number(row.turns || 0);
+    summary.tokens_in += Number(row.tokens_in || 0);
+    summary.tokens_out += Number(row.tokens_out || 0);
+    summary.cached_tokens += Number(row.cached_tokens || 0);
+    summary.reasoning_tokens += Number(row.reasoning_tokens || 0);
+  }
+
+  summary.sessions = sessionSet.size;
+  summary.tokens_total = summary.tokens_in + summary.tokens_out;
+
+  return summary;
+}

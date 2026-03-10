@@ -1,5 +1,16 @@
 import { sortRows } from './utils.js';
 
+export const supportedMetrics = [
+  'tokens_total',
+  'tokens_in',
+  'tokens_out',
+  'sessions',
+  'turns',
+  'cached_tokens',
+  'reasoning_tokens',
+  'models',
+];
+
 export function aggregateRecords(records, { providerFilter, modelFilter, sortBy, maxRows }) {
   const map = new Map();
 
@@ -57,6 +68,51 @@ export function aggregateRecords(records, { providerFilter, modelFilter, sortBy,
   return typeof maxRows === 'number' && maxRows > 0 ? sorted.slice(0, maxRows) : sorted;
 }
 
+export function scopeTotals(rows) {
+  const providerSet = new Set();
+  const sessionSet = new Set();
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      providerSet.add(row.provider);
+      acc.models += 1;
+      acc.turns += Number(row.turns || 0);
+      acc.tokens_in += Number(row.tokens_in || 0);
+      acc.tokens_out += Number(row.tokens_out || 0);
+      acc.cached_tokens += Number(row.cached_tokens || 0);
+      acc.reasoning_tokens += Number(row.reasoning_tokens || 0);
+
+      (row.session_ids || []).forEach((sessionId) => {
+        sessionSet.add(`${row.provider}|||${sessionId}`);
+      });
+
+      return acc;
+    },
+    {
+      providers: 0,
+      models: 0,
+      sessions: 0,
+      turns: 0,
+      tokens_in: 0,
+      tokens_out: 0,
+      tokens_total: 0,
+      cached_tokens: 0,
+      reasoning_tokens: 0,
+    },
+  );
+
+  return {
+    ...totals,
+    providers: providerSet.size,
+    sessions: sessionSet.size,
+    tokens_total: totals.tokens_in + totals.tokens_out,
+  };
+}
+
+export function metricValue(scope, metric) {
+  return Number(scope?.[metric] || 0);
+}
+
 export function providerTotals(rows) {
   const out = new Map();
   for (const r of rows) {
@@ -92,30 +148,5 @@ export function providerTotals(rows) {
 }
 
 export function summarizeRows(rows) {
-  const sessionSet = new Set();
-
-  const summary = {
-    models: rows.length,
-    sessions: 0,
-    turns: 0,
-    tokens_in: 0,
-    tokens_out: 0,
-    tokens_total: 0,
-    cached_tokens: 0,
-    reasoning_tokens: 0,
-  };
-
-  for (const row of rows) {
-    for (const sid of row.session_ids || []) sessionSet.add(sid);
-    summary.turns += Number(row.turns || 0);
-    summary.tokens_in += Number(row.tokens_in || 0);
-    summary.tokens_out += Number(row.tokens_out || 0);
-    summary.cached_tokens += Number(row.cached_tokens || 0);
-    summary.reasoning_tokens += Number(row.reasoning_tokens || 0);
-  }
-
-  summary.sessions = sessionSet.size;
-  summary.tokens_total = summary.tokens_in + summary.tokens_out;
-
-  return summary;
+  return scopeTotals(rows);
 }

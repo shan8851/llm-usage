@@ -2,11 +2,67 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { formatCompact, formatNumber } from './utils.js';
 
+const openRouterModelBreakdownNote = 'model/token breakdown not available from public key/credits endpoints';
+
 function colourProvider(provider) {
   if (provider === 'claude') return chalk.hex('#D97706')(provider);
   if (provider === 'codex') return chalk.hex('#2563EB')(provider);
   if (provider === 'openrouter') return chalk.hex('#059669')(provider);
   return provider;
+}
+
+function coerceFiniteNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function formatLooseValue(value) {
+  const numeric = coerceFiniteNumber(value);
+  if (numeric == null) return String(value);
+
+  return new Intl.NumberFormat('en-GB', {
+    maximumFractionDigits: Number.isInteger(numeric) ? 0 : 6,
+  }).format(numeric);
+}
+
+function unwrapResponseLayers(value) {
+  const layers = [];
+  const seen = new Set();
+  let current = value;
+
+  while (current && typeof current === 'object' && !Array.isArray(current) && !seen.has(current)) {
+    layers.push(current);
+    seen.add(current);
+    current = current.data;
+  }
+
+  return layers;
+}
+
+function readPathValue(value, path) {
+  return path.reduce(
+    (acc, key) => (acc && typeof acc === 'object' && key in acc ? acc[key] : undefined),
+    value,
+  );
+}
+
+function pickResponseValue(value, paths) {
+  const layers = unwrapResponseLayers(value);
+
+  for (const layer of layers) {
+    for (const path of paths) {
+      const candidate = readPathValue(layer, path);
+      if (candidate != null) return candidate;
+    }
+  }
+
+  return null;
 }
 
 function humanModel(model) {
@@ -82,13 +138,14 @@ export function renderProviderTotalsTable(totals) {
 
 export function renderSummaryTable(summary) {
   const table = new Table({
-    head: ['Scope', 'Models', 'Sessions', 'Turns', 'In', 'Out', 'Total', 'Cached', 'Reasoning'],
+    head: ['Scope', 'Providers', 'Models', 'Sessions', 'Turns', 'In', 'Out', 'Total', 'Cached', 'Reasoning'],
     style: { head: ['yellow'], border: ['grey'] },
-    colAligns: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+    colAligns: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
   });
 
   table.push([
     'selected',
+    formatNumber(summary.providers),
     formatNumber(summary.models),
     formatNumber(summary.sessions),
     formatNumber(summary.turns),
@@ -104,8 +161,19 @@ export function renderSummaryTable(summary) {
 
 export function formatMetricValue(metric, summary, compact = true) {
   const n = Number(summary?.[metric] || 0);
-  if (compact) return formatCompact(n);
-  return formatNumber(n);
+  const tokenMetrics = new Set([
+    'tokens_total',
+    'tokens_in',
+    'tokens_out',
+    'cached_tokens',
+    'reasoning_tokens',
+  ]);
+
+  if (compact) {
+    return tokenMetrics.has(metric) ? formatCompact(n) : formatNumber(n);
+  }
+
+  return String(Math.round(n));
 }
 
 export function renderOpenRouterBlock(orData) {
@@ -125,31 +193,32 @@ export function renderOpenRouterBlock(orData) {
   if (orData.missingApiKey) {
     table.push(['status', `missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`]);
     table.push(['hint', `export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`]);
-    table.push(['note', 'model/token breakdown not available from public key/credits endpoints']);
+    table.push(['note', openRouterModelBreakdownNote]);
     return `\n${table.toString()}`;
   }
 
   if (orData.key) {
-    const d = orData.key?.data || orData.key;
-    const limit = d?.limit ?? d?.rate_limit ?? d?.rateLimit;
-    const usage = d?.usage ?? d?.used ?? d?.requests;
-    const remaining = d?.limit_remaining ?? d?.remaining;
+    const limit = pickResponseValue(orData.key, [['limit'], ['rate_limit'], ['rateLimit'], ['limits', 'limit']]);
+    const usage = pickResponseValue(orData.key, [['usage'], ['used'], ['requests'], ['request_count']]);
+    const remaining = pickResponseValue(orData.key, [['limit_remaining'], ['remaining'], ['remaining_requests']]);
 
-    if (usage != null) table.push(['key usage', String(usage)]);
-    if (limit != null) table.push(['key limit', String(limit)]);
-    if (remaining != null) table.push(['key remaining', String(remaining)]);
+    if (usage != null) table.push(['key usage', formatLooseValue(usage)]);
+    if (limit != null) table.push(['key limit', formatLooseValue(limit)]);
+    if (remaining != null) table.push(['key remaining', formatLooseValue(remaining)]);
   }
   if (orData.keyError) table.push(['key status', `error: ${orData.keyError}`]);
 
   if (orData.credits) {
-    const d = orData.credits?.data || orData.credits;
-    const total = d?.total_credits;
-    const used = d?.total_usage;
-    const left = total != null && used != null ? Number(total) - Number(used) : null;
+    const total = pickResponseValue(orData.credits, [['total_credits'], ['totalCredits'], ['credits_total']]);
+    const used = pickResponseValue(orData.credits, [['total_usage'], ['totalUsage'], ['credits_used']]);
+    const remaining = pickResponseValue(orData.credits, [['remaining_credits'], ['remainingCredits'], ['balance'], ['credits_remaining']]);
+    const totalNumber = coerceFiniteNumber(total);
+    const usedNumber = coerceFiniteNumber(used);
+    const left = remaining ?? (totalNumber != null && usedNumber != null ? totalNumber - usedNumber : null);
 
-    if (total != null) table.push(['credits total', String(total)]);
-    if (used != null) table.push(['credits used', String(used)]);
-    if (left != null && Number.isFinite(left)) table.push(['credits left', left.toFixed(6)]);
+    if (total != null) table.push(['credits total', formatLooseValue(total)]);
+    if (used != null) table.push(['credits used', formatLooseValue(used)]);
+    if (left != null) table.push(['credits left', formatLooseValue(left)]);
   }
   if (orData.creditsError) table.push(['credits status', `error: ${orData.creditsError}`]);
 
@@ -157,7 +226,7 @@ export function renderOpenRouterBlock(orData) {
     table.push(['status', 'no data returned']);
   }
 
-  table.push(['note', 'model/token breakdown not available from public key/credits endpoints']);
+  table.push(['note', openRouterModelBreakdownNote]);
 
   return `\n${table.toString()}`;
 }

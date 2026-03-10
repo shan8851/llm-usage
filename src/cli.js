@@ -4,7 +4,7 @@ import { loadConfig, exampleConfigToml } from './config.js';
 import { parseTime } from './utils.js';
 import { collectClaudeRows } from './parse-claude.js';
 import { collectCodexRows } from './parse-codex.js';
-import { aggregateRecords, providerTotals, summarizeRows } from './aggregate.js';
+import { aggregateRecords, metricValue, providerTotals, summarizeRows, supportedMetrics } from './aggregate.js';
 import { formatMetricValue, renderOpenRouterBlock, renderProviderTotalsTable, renderRowsTable, renderSummaryTable } from './render.js';
 import { fetchOpenRouterSummary } from './openrouter.js';
 
@@ -29,17 +29,7 @@ program
   .option('--print-config-example', 'Print example config and exit');
 
 const opts = program.parse(process.argv).opts();
-
-const validMetrics = new Set([
-  'tokens_total',
-  'tokens_in',
-  'tokens_out',
-  'sessions',
-  'turns',
-  'cached_tokens',
-  'reasoning_tokens',
-  'models',
-]);
+const validMetrics = new Set(supportedMetrics);
 
 if (opts.metric && !validMetrics.has(opts.metric)) {
   throw new Error(`Invalid --metric '${opts.metric}'. Allowed: ${[...validMetrics].join(', ')}`);
@@ -47,6 +37,10 @@ if (opts.metric && !validMetrics.has(opts.metric)) {
 
 if (opts.valueOnly && !opts.metric) {
   throw new Error('--value-only requires --metric');
+}
+
+if (opts.metric && opts.totalsOnly) {
+  throw new Error('--metric cannot be combined with --totals-only');
 }
 
 if (opts.printConfigExample) {
@@ -80,15 +74,20 @@ const filteredRows = aggregateRecords(records, {
 });
 
 const rows = typeof opts.maxRows === 'number' && opts.maxRows > 0 ? filteredRows.slice(0, opts.maxRows) : filteredRows;
-const totals = providerTotals(filteredRows);
+const totals = providerTotals(rows);
+const scopeProviderTotals = providerTotals(filteredRows);
 const summary = summarizeRows(filteredRows);
+const compactTextMode = !opts.json && (Boolean(opts.metric) || opts.totalsOnly);
+const selectedMetricValue = opts.metric ? metricValue(summary, opts.metric) : null;
 
-const orData = await fetchOpenRouterSummary({
-  enabled: Boolean(opts.openrouter && config.openrouter.enabled),
-  apiKey: config.openrouter.apiKey,
-  apiKeyEnv: config.openrouter.apiKeyEnv,
-  baseUrl: config.openrouter.baseUrl,
-});
+const orData = compactTextMode
+  ? null
+  : await fetchOpenRouterSummary({
+      enabled: Boolean(opts.openrouter && config.openrouter.enabled),
+      apiKey: config.openrouter.apiKey,
+      apiKeyEnv: config.openrouter.apiKeyEnv,
+      baseUrl: config.openrouter.baseUrl,
+    });
 
 if (opts.json) {
   console.log(
@@ -107,6 +106,8 @@ if (opts.json) {
         summary,
         rows,
         providerTotals: totals,
+        scopeProviderTotals,
+        metric: opts.metric ? { name: opts.metric, value: selectedMetricValue } : null,
         openrouter: orData,
       },
       null,
@@ -116,9 +117,17 @@ if (opts.json) {
   process.exit(0);
 }
 
-if (opts.metric && opts.valueOnly) {
-  const raw = Number(summary?.[opts.metric] || 0);
-  console.log(String(Math.round(raw)));
+if (opts.metric) {
+  if (opts.valueOnly) {
+    console.log(String(Math.round(selectedMetricValue ?? 0)));
+  } else {
+    console.log(`${opts.metric}: ${formatMetricValue(opts.metric, summary, true)}`);
+  }
+  process.exit(0);
+}
+
+if (opts.totalsOnly) {
+  console.log(renderSummaryTable(summary));
   process.exit(0);
 }
 
@@ -130,14 +139,8 @@ if (!opts.includeSynthetic && syntheticCount > 0) {
   console.log(chalk.grey(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
 }
 
-if (opts.metric) {
-  console.log(`\n${chalk.bold(opts.metric)}: ${formatMetricValue(opts.metric, summary, true)}`);
-}
-
 if (!filteredRows.length) {
   console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));
-} else if (opts.totalsOnly) {
-  console.log('\n' + renderSummaryTable(summary));
 } else {
   console.log('\n' + renderRowsTable(rows));
   console.log('\n' + renderProviderTotalsTable(totals));

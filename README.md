@@ -71,10 +71,10 @@ llm-usage --from 7d
 llm-usage --provider claude
 llm-usage --provider codex --model gpt-5
 llm-usage --sort sessions --max-rows 20
-llm-usage --totals-only
+llm-usage --from 7d --totals-only
 llm-usage --metric tokens_total
 llm-usage --metric tokens_total --value-only
-llm-usage --provider codex --metric tokens_out --value-only
+llm-usage --from 7d --provider codex --metric tokens_out
 llm-usage --json
 ```
 
@@ -87,13 +87,22 @@ llm-usage --json
 - `--sort <field>` `tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model`
 - `--max-rows <n>` max output rows (default `50`)
 - `--metric <metric>` one metric (`tokens_total|tokens_in|tokens_out|sessions|turns|cached_tokens|reasoning_tokens|models`)
+- `tokens_total` is `tokens_in + tokens_out` only; cached/reasoning tokens are not included
 - `--value-only` print only the metric value (requires `--metric`)
-- `--totals-only` print one compact totals table for selected scope
+- `--totals-only` print one compact totals table for the selected scope after timeframe/provider/model filters
 - `--json` machine-friendly output
 - `--config <path>` custom config file path
 - `--no-openrouter` skip OpenRouter lookup
 - `--include-synthetic` include Claude synthetic rows (normally hidden)
 - `--print-config-example` print sample config and exit
+
+### Quick checks
+
+```bash
+llm-usage --from 7d --totals-only
+llm-usage --from 7d --metric tokens_total --value-only
+llm-usage --from 7d --provider codex --metric tokens_out
+```
 
 ---
 

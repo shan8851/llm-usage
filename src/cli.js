@@ -57,6 +57,7 @@ const totals = providerTotals(rows);
 const orData = await fetchOpenRouterSummary({
   enabled: Boolean(opts.openrouter && config.openrouter.enabled),
   apiKey: config.openrouter.apiKey,
+  apiKeyEnv: config.openrouter.apiKeyEnv,
   baseUrl: config.openrouter.baseUrl,
 });
 

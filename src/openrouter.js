@@ -1,5 +1,18 @@
-export async function fetchOpenRouterSummary({ enabled, apiKey, baseUrl }) {
-  if (!enabled || !apiKey) return null;
+export async function fetchOpenRouterSummary({ enabled, apiKey, apiKeyEnv = 'OPENROUTER_API_KEY', baseUrl }) {
+  if (!enabled) {
+    return {
+      provider: 'openrouter',
+      disabled: true,
+    };
+  }
+
+  if (!apiKey) {
+    return {
+      provider: 'openrouter',
+      missingApiKey: true,
+      apiKeyEnv,
+    };
+  }
 
   const headers = {
     Authorization: `Bearer ${apiKey}`,

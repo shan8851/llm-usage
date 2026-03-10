@@ -74,6 +74,17 @@ export function renderOpenRouterBlock(orData) {
   const lines = [];
   lines.push(chalk.bold('\nOpenRouter'));
 
+  if (orData.disabled) {
+    lines.push(`  ${chalk.grey('disabled (use --openrouter and set config openrouter.enabled=true)')}`);
+    return lines.join('\n');
+  }
+
+  if (orData.missingApiKey) {
+    lines.push(`  ${chalk.yellow(`missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`)}`);
+    lines.push(`  ${chalk.grey(`hint: export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`)}`);
+    return lines.join('\n');
+  }
+
   if (orData.key) {
     const d = orData.key?.data || orData.key;
     const limit = d?.limit ?? d?.rate_limit ?? d?.rateLimit;

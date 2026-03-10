@@ -22,6 +22,7 @@ program
   .option('--json', 'JSON output')
   .option('--config <path>', 'Path to config TOML')
   .option('--no-openrouter', 'Skip OpenRouter API lookup')
+  .option('--include-synthetic', 'Include Claude synthetic zero-usage model rows')
   .option('--print-config-example', 'Print example config and exit');
 
 const opts = program.parse(process.argv).opts();
@@ -44,7 +45,12 @@ const [claudeRows, codexRows] = await Promise.all([
   collectCodexRows(config.paths.codex, from, to),
 ]);
 
-const records = [...claudeRows, ...codexRows];
+const allRecords = [...claudeRows, ...codexRows];
+const syntheticCount = allRecords.filter((r) => r.provider === 'claude' && r.model === '<synthetic>').length;
+const records = opts.includeSynthetic
+  ? allRecords
+  : allRecords.filter((r) => !(r.provider === 'claude' && r.model === '<synthetic>'));
+
 const rows = aggregateRecords(records, {
   providerFilter: opts.provider,
   modelFilter: opts.model,
@@ -69,8 +75,10 @@ if (opts.json) {
           from: from.toISOString(),
           to: to.toISOString(),
           configPath,
-          records: records.length,
+          recordsParsed: allRecords.length,
+          recordsUsed: records.length,
           rows: rows.length,
+          syntheticFiltered: opts.includeSynthetic ? 0 : syntheticCount,
         },
         rows,
         providerTotals: totals,
@@ -86,7 +94,10 @@ if (opts.json) {
 console.log(chalk.bold(`\nLLM Usage`));
 console.log(chalk.grey(`window: ${from.toISOString()} → ${to.toISOString()}`));
 console.log(chalk.grey(`config: ${configPath}`));
-console.log(chalk.grey(`records parsed: ${records.length}`));
+console.log(chalk.grey(`records parsed: ${allRecords.length}`));
+if (!opts.includeSynthetic && syntheticCount > 0) {
+  console.log(chalk.grey(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
+}
 
 if (!rows.length) {
   console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));

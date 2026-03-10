@@ -9,6 +9,17 @@ function colourProvider(provider) {
   return provider;
 }
 
+function humanModel(model) {
+  if (!model) return 'unknown';
+  if (model === '<synthetic>') return 'synthetic (system)';
+
+  const m = /^(.*)-(\d{4})(\d{2})(\d{2})$/.exec(model);
+  if (!m) return model;
+
+  const [, base, y, mo, d] = m;
+  return `${base} (${y}-${mo}-${d})`;
+}
+
 export function renderRowsTable(rows) {
   const table = new Table({
     head: [
@@ -33,7 +44,7 @@ export function renderRowsTable(rows) {
   for (const row of rows) {
     table.push([
       colourProvider(row.provider),
-      row.model,
+      humanModel(row.model),
       formatNumber(row.sessions),
       formatNumber(row.turns),
       formatCompact(row.tokens_in),
@@ -71,18 +82,22 @@ export function renderProviderTotalsTable(totals) {
 
 export function renderOpenRouterBlock(orData) {
   if (!orData) return null;
-  const lines = [];
-  lines.push(chalk.bold('\nOpenRouter'));
+
+  const table = new Table({
+    head: ['OpenRouter', 'Value'],
+    style: { head: ['green'], border: ['grey'] },
+    colAligns: ['left', 'left'],
+  });
 
   if (orData.disabled) {
-    lines.push(`  ${chalk.grey('disabled (use --openrouter and set config openrouter.enabled=true)')}`);
-    return lines.join('\n');
+    table.push(['status', 'disabled']);
+    return `\n${table.toString()}`;
   }
 
   if (orData.missingApiKey) {
-    lines.push(`  ${chalk.yellow(`missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`)}`);
-    lines.push(`  ${chalk.grey(`hint: export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`)}`);
-    return lines.join('\n');
+    table.push(['status', `missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`]);
+    table.push(['hint', `export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`]);
+    return `\n${table.toString()}`;
   }
 
   if (orData.key) {
@@ -90,17 +105,28 @@ export function renderOpenRouterBlock(orData) {
     const limit = d?.limit ?? d?.rate_limit ?? d?.rateLimit;
     const usage = d?.usage ?? d?.used ?? d?.requests;
     const remaining = d?.limit_remaining ?? d?.remaining;
-    if (limit != null || usage != null || remaining != null) {
-      lines.push(`  key: usage=${usage ?? '-'} limit=${limit ?? '-'} remaining=${remaining ?? '-'}`);
-    }
+
+    if (usage != null) table.push(['key usage', String(usage)]);
+    if (limit != null) table.push(['key limit', String(limit)]);
+    if (remaining != null) table.push(['key remaining', String(remaining)]);
   }
-  if (orData.keyError) lines.push(`  key: ${chalk.yellow(orData.keyError)}`);
+  if (orData.keyError) table.push(['key status', `error: ${orData.keyError}`]);
 
   if (orData.credits) {
     const d = orData.credits?.data || orData.credits;
-    lines.push(`  credits: total=${d?.total_credits ?? '-'} used=${d?.total_usage ?? '-'} left=${d?.total_credits != null && d?.total_usage != null ? (d.total_credits - d.total_usage).toFixed(4) : '-'}`);
-  }
-  if (orData.creditsError) lines.push(`  credits: ${chalk.yellow(orData.creditsError)}`);
+    const total = d?.total_credits;
+    const used = d?.total_usage;
+    const left = total != null && used != null ? Number(total) - Number(used) : null;
 
-  return lines.join('\n');
+    if (total != null) table.push(['credits total', String(total)]);
+    if (used != null) table.push(['credits used', String(used)]);
+    if (left != null && Number.isFinite(left)) table.push(['credits left', left.toFixed(6)]);
+  }
+  if (orData.creditsError) table.push(['credits status', `error: ${orData.creditsError}`]);
+
+  if (table.length === 0) {
+    table.push(['status', 'no data returned']);
+  }
+
+  return `\n${table.toString()}`;
 }

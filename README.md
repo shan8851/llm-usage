@@ -25,6 +25,8 @@ Default output is a clean table with:
 - JSON output with `--json`
 - Time filtering (`--from 7d`, `--from 24h`, ISO timestamps)
 - Provider/model filtering
+- Hides Claude `<synthetic>` zero-usage rows by default (toggle with `--include-synthetic`)
+- Human-friendly model display for dated IDs (e.g. `claude-opus-4-5-20251101` -> `claude-opus-4-5 (2025-11-01)`)
 
 ---
 
@@ -83,6 +85,7 @@ llm-usage --json
 - `--json` machine-friendly output
 - `--config <path>` custom config file path
 - `--no-openrouter` skip OpenRouter lookup
+- `--include-synthetic` include Claude synthetic rows (normally hidden)
 - `--print-config-example` print sample config and exit
 
 ---

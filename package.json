@@ -1,0 +1,35 @@
+{
+  "name": "llm-usage",
+  "version": "0.1.0",
+  "description": "Pretty terminal usage summaries for Claude Code, Codex, and OpenRouter",
+  "type": "module",
+  "bin": {
+    "llm-usage": "./bin/llm-usage.js",
+    "lu": "./bin/llm-usage.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node ./bin/llm-usage.js",
+    "dev": "node ./bin/llm-usage.js",
+    "check": "node ./bin/llm-usage.js --help"
+  },
+  "keywords": [
+    "llm",
+    "codex",
+    "claude",
+    "usage",
+    "tokens",
+    "cli"
+  ],
+  "author": "Shan",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "fast-glob": "^3.3.3",
+    "toml": "^3.0.0"
+  }
+}

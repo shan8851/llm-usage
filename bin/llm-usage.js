@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+import('../src/cli.js').catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

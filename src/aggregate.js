@@ -1,5 +1,56 @@
 import { sortRows } from './utils.js';
 
+export function dailyBuckets(records, { providerFilter, modelFilter } = {}) {
+  const providerAllow = providerFilter
+    ? new Set(providerFilter.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))
+    : null;
+  const modelNeedle = modelFilter?.trim().toLowerCase() || null;
+
+  const map = new Map(); // YYYY-MM-DD -> bucket
+
+  for (const r of records) {
+    const provider = String(r.provider || 'unknown').toLowerCase();
+    const model = String(r.model || 'unknown');
+
+    if (providerAllow && !providerAllow.has(provider)) continue;
+    if (modelNeedle && !model.toLowerCase().includes(modelNeedle)) continue;
+
+    const ts = r.timestamp instanceof Date ? r.timestamp : new Date(r.timestamp);
+    if (Number.isNaN(ts.getTime())) continue;
+
+    // bucket by local calendar date
+    const y = ts.getFullYear().toString().padStart(4, '0');
+    const mo = (ts.getMonth() + 1).toString().padStart(2, '0');
+    const d = ts.getDate().toString().padStart(2, '0');
+    const date = `${y}-${mo}-${d}`;
+
+    if (!map.has(date)) {
+      map.set(date, {
+        date,
+        _sessionsSet: new Set(),
+        sessions: 0,
+        turns: 0,
+        tokens_in: 0,
+        tokens_out: 0,
+        cached_tokens: 0,
+        reasoning_tokens: 0,
+      });
+    }
+
+    const bucket = map.get(date);
+    bucket._sessionsSet.add(`${provider}|||${r.sessionId}`);
+    bucket.turns += Number(r.turns || 0);
+    bucket.tokens_in += Number(r.tokens_in || 0);
+    bucket.tokens_out += Number(r.tokens_out || 0);
+    bucket.cached_tokens += Number(r.cached_tokens || 0);
+    bucket.reasoning_tokens += Number(r.reasoning_tokens || 0);
+  }
+
+  return [...map.values()]
+    .map((b) => ({ ...b, sessions: b._sessionsSet.size, _sessionsSet: undefined }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export const supportedMetrics = [
   'tokens_total',
   'tokens_in',

@@ -183,6 +183,28 @@ export function formatMetricValue(metric, summary, compact = true) {
   return String(Math.round(n));
 }
 
+export function renderDailyTable(daily) {
+  const table = new Table({
+    head: ['Date', 'Sessions', 'Turns', 'In', 'Out', 'Cached', 'Reasoning'],
+    style: { head: ['cyan'], border: ['grey'] },
+    colAligns: ['left', 'right', 'right', 'right', 'right', 'right', 'right'],
+  });
+
+  for (const d of daily) {
+    table.push([
+      d.date,
+      formatNumber(d.sessions),
+      formatNumber(d.turns),
+      formatCompact(d.tokens_in),
+      colourOut(d.tokens_out),
+      formatCompact(d.cached_tokens),
+      formatCompact(d.reasoning_tokens),
+    ]);
+  }
+
+  return table.toString();
+}
+
 export function renderOpenRouterBlock(orData) {
   if (!orData) return null;
 

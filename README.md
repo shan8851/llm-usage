@@ -88,16 +88,27 @@ llm-usage --from 7d --metric tokens_total --value-only
 
 ## Usage
 
+### Commands
+
+| Command | Description |
+|---|---|
+| `llm-usage` (or `lu`) | Full summary (models + providers + OpenRouter) |
+| `llm-usage daily` | Per-day breakdown |
+| `llm-usage models` | Model table only |
+| `llm-usage providers` | Provider totals only |
+
+All commands accept the same flags below.
+
 ```bash
-llm-usage
 llm-usage --from 7d
-llm-usage --provider claude
-llm-usage --provider codex --model gpt-5
+llm-usage daily --from 7d
+llm-usage daily --from 7d --provider codex
+llm-usage models --from 7d
+llm-usage providers --from 30d
+llm-usage --provider claude --model opus
 llm-usage --sort sessions --max-rows 20
 llm-usage --from 7d --totals-only
-llm-usage --metric tokens_total
 llm-usage --metric tokens_total --value-only
-llm-usage --from 7d --provider codex --metric tokens_out
 llm-usage --json
 ```
 

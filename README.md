@@ -16,7 +16,7 @@ If you have `OPENROUTER_API_KEY` set, it can also show a small OpenRouter accoun
 - provider totals
 - daily breakdowns
 - JSON output for scripting
-- a few useful filters, without turning into a giant CLI tax form
+- a few useful filters
 
 By default the main command shows:
 

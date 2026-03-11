@@ -186,12 +186,17 @@ Reads cumulative `token_count` events and computes per-event deltas for:
 
 ---
 
-## Roadmap
+## What's Next
 
-- **v0.2** — sparklines + mini charts inside the table
-- **v0.3** — richer subcommands: `models`, `providers`, `sessions`
-- **v0.4** — interactive TUI mode (live refresh, drill-down)
-- **v1.0** — cost estimates per provider
+Loose ideas — no promises, no timeline:
+
+- Subcommands (`daily`, `models`, `providers`, `sessions`) for focused views
+- Per-day breakdown table
+- Cost estimates per model (hardcoded pricing table)
+- Sparklines / mini charts in terminal
+- CSV / plain output for piping
+- Interactive TUI mode (drill-down, live refresh)
+- More provider adapters (Gemini, local Ollama logs, etc.)
 
 ---
 

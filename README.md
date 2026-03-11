@@ -6,9 +6,19 @@
 
 > See where your tokens actually go. One command, all providers.
 
-Pretty terminal usage summaries for Claude Code, Codex, and OpenRouter.
+`llm-usage` is a small CLI that reads local usage logs from Claude Code and Codex, then prints a clean terminal summary by model and provider.
 
-Default output is a clean table with:
+If you have `OPENROUTER_API_KEY` set, it can also show a small OpenRouter account snapshot on the main command. That part is just `/key` + `/credits`, not per-model usage.
+
+## What You Get
+
+- model-level usage across Claude Code and Codex
+- provider totals
+- daily breakdowns
+- JSON output for scripting
+- a few useful filters, without turning into a giant CLI tax form
+
+By default the main command shows:
 
 - provider
 - model
@@ -17,28 +27,14 @@ Default output is a clean table with:
 - tokens in
 - tokens out
 - cached tokens
-- reasoning tokens (where available)
+- reasoning tokens where available
 - last seen
 
----
-
-## Features
-
-- Parses **Claude Code local logs** (`~/.claude/projects` and `~/.config/claude/projects`)
-- Parses **Codex local logs** (`~/.codex/sessions`)
-- Optional **OpenRouter** balance/key snapshot (`/key` + `/credits`)
-- Pretty table by default
-- JSON output with `--json`
-- Time filtering (`--from 7d`, `--from 24h`, ISO timestamps)
-- Provider/model filtering
-- Hides Claude `<synthetic>` zero-usage rows by default (toggle with `--include-synthetic`)
-- Human-friendly model display for dated IDs (e.g. `claude-opus-4-5-20251101` -> `claude-opus-4-5 (2025-11-01)`)
-
----
+Claude `<synthetic>` rows are ignored.
 
 ## Install
 
-### Global (npm)
+### Global
 
 ```bash
 npm install -g llm-usage
@@ -60,89 +56,67 @@ npm install
 npm run dev -- --from 7d
 ```
 
-### Local link (test global command from source)
+## Quick Start
 
 ```bash
-npm link
-llm-usage --from 30d
-```
-
----
-
-## Quick start
-
-<!-- TODO: add terminal screenshot here -->
-
-```bash
-# See everything from the last 7 days
+# Last 7 days, normal summary
 llm-usage --from 7d
 
-# Just the totals — great for a quick sanity check
-llm-usage --from 7d --totals-only
+# Daily buckets
+llm-usage daily --from 7d
 
-# Pull a single metric value (pipe-friendly)
+# Model-focused view, sorted a different way
+llm-usage models --from 30d --sort sessions
+
+# Pipe-friendly single metric
 llm-usage --from 7d --metric tokens_total --value-only
 ```
 
----
+## Commands
 
-## Usage
-
-### Commands
-
-| Command | Description |
+| Command | What it does |
 |---|---|
-| `llm-usage` (or `lu`) | Full summary (models + providers + OpenRouter) |
-| `llm-usage daily` | Per-day breakdown |
+| `llm-usage` or `lu` | Main summary: models, provider totals, and optional OpenRouter snapshot |
+| `llm-usage daily` | Usage grouped by local calendar day |
 | `llm-usage models` | Model table only |
 | `llm-usage providers` | Provider totals only |
 
-All commands accept the same flags below.
+## Flags
 
-```bash
-llm-usage --from 7d
-llm-usage daily --from 7d
-llm-usage daily --from 7d --provider codex
-llm-usage models --from 7d
-llm-usage providers --from 30d
-llm-usage --provider claude --model opus
-llm-usage --sort sessions --max-rows 20
-llm-usage --from 7d --totals-only
-llm-usage --metric tokens_total --value-only
-llm-usage --json
-```
+Common flags:
 
-### Flags
-
-- `--provider <providers>` comma-separated (e.g. `claude,codex`)
-- `--model <substring>` filter model name
-- `--from <time>` `7d`, `24h`, `30m`, or ISO date/time
-- `--to <time>` `now` or ISO date/time
-- `--sort <field>` `tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model`
-- `--max-rows <n>` max output rows (default `50`)
-- `--metric <metric>` one metric (`tokens_total|tokens_in|tokens_out|sessions|turns|cached_tokens|reasoning_tokens|models`)
-- `tokens_total` is `tokens_in + tokens_out` only; cached/reasoning tokens are not included
-- `--value-only` print only the metric value (requires `--metric`)
-- `--totals-only` print one compact totals table for the selected scope after timeframe/provider/model filters
+- `--from <time>` start time, like `7d`, `24h`, `30m`, or an ISO timestamp
+- `--to <time>` end time, `now` or an ISO timestamp
+- `--provider <providers>` comma-separated provider filter, for example `claude,codex`
+- `--model <substring>` filter model names by substring
 - `--json` machine-friendly output
-- `--config <path>` custom config file path
-- `--no-openrouter` skip OpenRouter lookup
-- `--include-synthetic` include Claude synthetic rows (normally hidden)
-- `--print-config-example` print sample config and exit
+- `--config <path>` custom config path
 
-### Quick checks
+Main command and `models`:
+
+- `--sort <field>` one of `tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model`
+
+Main command only:
+
+- `--metric <metric>` one of `tokens_total|tokens_in|tokens_out|sessions|turns|cached_tokens|reasoning_tokens|models`
+- `--value-only` print only the metric value
+- `--print-config-example` print a sample config and exit
+
+Use `llm-usage --help` for the full CLI help text.
+
+## More Examples
 
 ```bash
-llm-usage --from 7d --totals-only
-llm-usage --from 7d --metric tokens_total --value-only
-llm-usage --from 7d --provider codex --metric tokens_out
+llm-usage --provider claude --model opus
+llm-usage providers --from 30d
+llm-usage models --provider codex --sort tokens_in
+llm-usage daily --from 14d --provider codex
+llm-usage --from 7d --json
 ```
-
----
 
 ## Config
 
-By default, config is loaded from:
+Default config path:
 
 `~/.config/llm-usage/config.toml`
 
@@ -165,21 +139,19 @@ baseUrl = "https://openrouter.ai/api/v1"
 apiKeyEnv = "OPENROUTER_API_KEY"
 ```
 
-Set API key for OpenRouter:
+Set the OpenRouter key if you want the snapshot block:
 
 ```bash
 export OPENROUTER_API_KEY="..."
 ```
 
-OpenRouter currently exposes key/credit-level data on public endpoints; model/token breakdown is not available from `/key` + `/credits`.
+If OpenRouter is disabled in config or the API key is missing, the CLI just skips that block.
 
----
-
-## Data notes
+## Data Notes
 
 ### Claude
 
-Reads message usage fields from local JSONL logs:
+Reads local JSONL logs and pulls usage from:
 
 - `input_tokens`
 - `output_tokens`
@@ -188,35 +160,25 @@ Reads message usage fields from local JSONL logs:
 
 ### Codex
 
-Reads cumulative `token_count` events and computes per-event deltas for:
+Reads cumulative `token_count` events and turns them into per-event deltas for:
 
 - `input_tokens`
 - `cached_input_tokens`
 - `output_tokens`
 - `reasoning_output_tokens`
 
----
+## Limits And Caveats
 
-## What's Next
-
-Loose ideas — no promises, no timeline:
-
-- Cost estimates per model (hardcoded pricing table)
-- Sparklines / mini charts in terminal
-- CSV / plain output for piping
-- Interactive TUI mode (drill-down, live refresh)
-- More provider adapters (Gemini, local Ollama logs, etc.)
-- `sessions` subcommand with per-session drill-down
-
----
+- This is local-log based. If a provider does not write usable local logs, it is invisible here.
+- `tokens_total` means `tokens_in + tokens_out`. Cached and reasoning tokens are shown separately and are not included in that total.
+- Daily output uses your local calendar date, not UTC bucket boundaries.
+- OpenRouter support is account-level only right now. Public `/key` and `/credits` endpoints do not give model-by-model token breakdowns.
 
 ## Contributing
 
-PRs welcome. No formal process — just open an issue or PR and we'll figure it out.
+PRs welcome. No formal process. Open an issue or PR and we can figure it out.
 
-If you want to add a new provider adapter, check `src/parse-claude.js` or `src/parse-codex.js` for the pattern. Return an array of record objects and the rest just works.
-
----
+If you want to add another provider, the existing Claude and Codex parsers are the pattern: return normalized record objects and let the aggregation/rendering do the rest.
 
 ## License
 

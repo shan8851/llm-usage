@@ -1,9 +1,5 @@
-import { Command } from 'commander';
+import { InvalidArgumentError, Command } from 'commander';
 import chalk from 'chalk';
-import { loadConfig, exampleConfigToml } from './config.js';
-import { parseTime, formatCompact, formatNumber } from './utils.js';
-import { collectClaudeRows } from './parse-claude.js';
-import { collectCodexRows } from './parse-codex.js';
 import {
   aggregateRecords,
   dailyBuckets,
@@ -12,21 +8,61 @@ import {
   summarizeRows,
   supportedMetrics,
 } from './aggregate.js';
+import { loadConfig, exampleConfigToml } from './config.js';
+import { fetchOpenRouterSummary } from './openrouter.js';
+import { collectClaudeRows } from './parse-claude.js';
+import { collectCodexRows } from './parse-codex.js';
 import {
   formatMetricValue,
   renderDailyTable,
   renderOpenRouterBlock,
   renderProviderTotalsTable,
   renderRowsTable,
-  renderSummaryTable,
 } from './render.js';
-import { fetchOpenRouterSummary } from './openrouter.js';
+import { formatCompact, formatNumber, parseTime, supportedSortFields } from './utils.js';
 
-// ── shared helpers ─────────────────────────────────────────────────────────────
+const defaultLookbackWindowMs = 30 * 24 * 60 * 60 * 1000;
+const syntheticModelName = '<synthetic>';
 
-async function loadData(opts) {
+const parseSortField = (value) => {
+  if (!supportedSortFields.includes(value)) {
+    throw new InvalidArgumentError(`must be one of: ${supportedSortFields.join(', ')}`);
+  }
+
+  return value;
+};
+
+const parseMetricName = (value) => {
+  if (!supportedMetrics.includes(value)) {
+    throw new InvalidArgumentError(`must be one of: ${supportedMetrics.join(', ')}`);
+  }
+
+  return value;
+};
+
+const addCommonOptions = (cmd) =>
+  cmd
+    .option('--from <time>', 'Start time (ISO or relative: 7d, 24h, 30m)', '30d')
+    .option('--to <time>', 'End time (ISO or now)', 'now')
+    .option('--provider <providers>', 'Filter providers (comma-separated), e.g. claude,codex')
+    .option('--model <substring>', 'Filter model substring')
+    .option('--json', 'JSON output')
+    .option('--config <path>', 'Path to config TOML');
+
+const addSortOption = (cmd) =>
+  cmd.option(
+    '--sort <field>',
+    `Sort models by ${supportedSortFields.join('|')}`,
+    parseSortField,
+    'tokens_out',
+  );
+
+const filterSyntheticRows = (records) =>
+  records.filter((record) => !(record.provider === 'claude' && record.model === syntheticModelName));
+
+const loadUsageContext = async (opts) => {
   const { config, configPath } = await loadConfig(opts.config);
-  const from = parseTime(opts.from, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const from = parseTime(opts.from, new Date(Date.now() - defaultLookbackWindowMs));
   const to = parseTime(opts.to, new Date());
 
   if (to < from) {
@@ -39,268 +75,227 @@ async function loadData(opts) {
   ]);
 
   const allRecords = [...claudeRows, ...codexRows];
-  const syntheticCount = allRecords.filter((r) => r.provider === 'claude' && r.model === '<synthetic>').length;
-  const records = opts.includeSynthetic
-    ? allRecords
-    : allRecords.filter((r) => !(r.provider === 'claude' && r.model === '<synthetic>'));
+  const records = filterSyntheticRows(allRecords);
 
-  return { config, configPath, from, to, allRecords, syntheticCount, records };
-}
+  return {
+    config,
+    configPath,
+    from,
+    to,
+    allRecords,
+    records,
+    syntheticRowsHidden: allRecords.length - records.length,
+  };
+};
 
-function printHeader({ from, to, configPath, allRecords, syntheticCount, includeSynthetic }) {
-  const separator = chalk.grey('─'.repeat(60));
-  console.log(chalk.bold.whiteBright('\n⚡ llm-usage'));
-  console.log(separator);
-  console.log(chalk.dim(`window: ${from.toISOString()} → ${to.toISOString()}`));
-  console.log(chalk.dim(`config: ${configPath}`));
-  console.log(chalk.dim(`records parsed: ${allRecords.length}`));
-  if (!includeSynthetic && syntheticCount > 0) {
-    console.log(chalk.dim(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
-  }
-}
-
-/** Add flags shared by all subcommands and the default command. */
-function addSharedOptions(cmd) {
-  return cmd
-    .option('--from <time>', 'Start time (ISO or relative: 7d, 24h, 30m)', '30d')
-    .option('--to <time>', 'End time (ISO or now)', 'now')
-    .option('--provider <providers>', 'Filter providers (comma-separated), e.g. claude,codex')
-    .option('--model <substring>', 'Filter model substring')
-    .option('--json', 'JSON output')
-    .option('--config <path>', 'Path to config TOML')
-    .option('--no-openrouter', 'Skip OpenRouter API lookup')
-    .option('--include-synthetic', 'Include Claude synthetic zero-usage model rows')
-    .option('--max-rows <n>', 'Limit output rows', (v) => Number(v), 50);
-}
-
-// ── root program ───────────────────────────────────────────────────────────────
-
-const program = new Command();
-
-program
-  .name('llm-usage')
-  .description('Pretty terminal usage summaries for Claude Code, Codex, and OpenRouter')
-  .enablePositionalOptions();
-
-addSharedOptions(program);
-
-program
-  .option('--sort <field>', 'Sort by tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model', 'tokens_out')
-  .option('--metric <metric>', 'Single metric output: tokens_total|tokens_in|tokens_out|sessions|turns|cached_tokens|reasoning_tokens|models')
-  .option('--value-only', 'Print only metric value (best with --metric)')
-  .option('--totals-only', 'Show one compact totals table for selected scope')
-  .option('--print-config-example', 'Print example config and exit')
-  .action(async (opts) => {
-    const validMetrics = new Set(supportedMetrics);
-
-    if (opts.metric && !validMetrics.has(opts.metric)) {
-      throw new Error(`Invalid --metric '${opts.metric}'. Allowed: ${[...validMetrics].join(', ')}`);
-    }
-    if (opts.valueOnly && !opts.metric) {
-      throw new Error('--value-only requires --metric');
-    }
-    if (opts.metric && opts.totalsOnly) {
-      throw new Error('--metric cannot be combined with --totals-only');
-    }
-    if (opts.printConfigExample) {
-      console.log(exampleConfigToml());
-      process.exit(0);
-    }
-
-    const { config, configPath, from, to, allRecords, syntheticCount, records } = await loadData(opts);
-
-    const filteredRows = aggregateRecords(records, {
-      providerFilter: opts.provider,
-      modelFilter: opts.model,
-      sortBy: opts.sort,
-    });
-
-    const rows = typeof opts.maxRows === 'number' && opts.maxRows > 0 ? filteredRows.slice(0, opts.maxRows) : filteredRows;
-    const totals = providerTotals(rows);
-    const scopeProviderTotals = providerTotals(filteredRows);
-    const summary = summarizeRows(filteredRows);
-
-    const printStyledHeader = () => {
-      const separator = chalk.grey('─'.repeat(60));
-      console.log(chalk.bold.whiteBright('\n⚡ llm-usage'));
-      console.log(separator);
-      console.log(chalk.dim(`window: ${from.toISOString()} → ${to.toISOString()}`));
-      console.log(chalk.dim(`config: ${configPath}`));
-      console.log(chalk.dim(`records parsed: ${allRecords.length}`));
-      if (!opts.includeSynthetic && syntheticCount > 0) {
-        console.log(chalk.dim(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
-      }
-      const headlineStat = `${formatCompact(summary.tokens_total)} tokens across ${formatNumber(summary.sessions)} sessions (${summary.models} models)`;
-      console.log('\n' + chalk.bold(headlineStat));
-    };
-
-    const compactTextMode = !opts.json && (Boolean(opts.metric) || opts.totalsOnly);
-    const selectedMetricValue = opts.metric ? metricValue(summary, opts.metric) : null;
-
-    const orData = compactTextMode
-      ? null
-      : await fetchOpenRouterSummary({
-          enabled: Boolean(opts.openrouter && config.openrouter.enabled),
-          apiKey: config.openrouter.apiKey,
-          apiKeyEnv: config.openrouter.apiKeyEnv,
-          baseUrl: config.openrouter.baseUrl,
-        });
-
-    if (opts.json) {
-      console.log(
-        JSON.stringify(
-          {
-            meta: {
-              from: from.toISOString(),
-              to: to.toISOString(),
-              configPath,
-              recordsParsed: allRecords.length,
-              recordsUsed: records.length,
-              rowsFiltered: filteredRows.length,
-              rowsShown: rows.length,
-              syntheticFiltered: opts.includeSynthetic ? 0 : syntheticCount,
-            },
-            summary,
-            rows,
-            providerTotals: totals,
-            scopeProviderTotals,
-            metric: opts.metric ? { name: opts.metric, value: selectedMetricValue } : null,
-            openrouter: orData,
-          },
-          null,
-          2,
-        ),
-      );
-      process.exit(0);
-    }
-
-    if (opts.metric) {
-      if (opts.valueOnly) {
-        console.log(String(Math.round(selectedMetricValue ?? 0)));
-      } else {
-        console.log(`${opts.metric}: ${formatMetricValue(opts.metric, summary, true)}`);
-      }
-      process.exit(0);
-    }
-
-    if (opts.totalsOnly) {
-      printStyledHeader();
-      console.log('\n' + renderSummaryTable(summary));
-      process.exit(0);
-    }
-
-    printStyledHeader();
-
-    if (!filteredRows.length) {
-      console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));
-    } else {
-      console.log('\n' + chalk.bold('📊 Models'));
-      console.log(renderRowsTable(rows));
-      console.log('\n' + chalk.bold('📦 Providers'));
-      console.log(renderProviderTotalsTable(totals));
-    }
-
-    const orBlock = renderOpenRouterBlock(orData);
-    if (orBlock) console.log(orBlock);
+const buildFilteredRows = (records, opts, sortBy = 'tokens_out') =>
+  aggregateRecords(records, {
+    providerFilter: opts.provider,
+    modelFilter: opts.model,
+    sortBy,
   });
 
-// ── daily subcommand ───────────────────────────────────────────────────────────
+const printHeader = ({ from, to, configPath, allRecords, summary }) => {
+  const separator = chalk.grey('─'.repeat(60));
+  const headlineStat = `${formatCompact(summary.tokens_total)} tokens across ${formatNumber(summary.sessions)} sessions (${formatNumber(summary.models)} models)`;
 
-const dailyCmd = new Command('daily').description('Show usage per calendar day');
-addSharedOptions(dailyCmd);
-dailyCmd.action(async (opts) => {
-  const { configPath, from, to, allRecords, syntheticCount, records } = await loadData(opts);
+  console.log(chalk.bold.whiteBright('\n⚡ llm-usage'));
+  console.log(separator);
+  console.log(chalk.dim(`window: ${from.toISOString()} -> ${to.toISOString()}`));
+  console.log(chalk.dim(`config: ${configPath}`));
+  console.log(chalk.dim(`records parsed: ${allRecords.length}`));
+  console.log(`\n${chalk.bold(headlineStat)}`);
+};
 
-  const buckets = dailyBuckets(records, {
+const renderMetricOutput = (metric, summary, valueOnly) => {
+  const selectedMetricValue = metricValue(summary, metric);
+
+  if (valueOnly) {
+    console.log(String(Math.round(selectedMetricValue)));
+    return;
+  }
+
+  console.log(`${metric}: ${formatMetricValue(metric, summary, true)}`);
+};
+
+const renderJson = (payload) => {
+  console.log(JSON.stringify(payload, null, 2));
+};
+
+const loadOpenRouterSummary = async (config) =>
+  fetchOpenRouterSummary({
+    enabled: config.openrouter.enabled,
+    apiKey: config.openrouter.apiKey,
+    baseUrl: config.openrouter.baseUrl,
+  });
+
+const renderRootCommand = async (opts) => {
+  if (opts.printConfigExample) {
+    console.log(exampleConfigToml());
+    return;
+  }
+
+  if (opts.valueOnly && !opts.metric) {
+    throw new Error('--value-only requires --metric');
+  }
+
+  const context = await loadUsageContext(opts);
+  const rows = buildFilteredRows(context.records, opts, opts.sort);
+  const summary = summarizeRows(rows);
+  const totals = providerTotals(rows);
+
+  if (opts.json) {
+    const openrouter = await loadOpenRouterSummary(context.config);
+
+    renderJson({
+      meta: {
+        from: context.from.toISOString(),
+        to: context.to.toISOString(),
+        configPath: context.configPath,
+        recordsParsed: context.allRecords.length,
+        recordsUsed: context.records.length,
+        rowsFiltered: rows.length,
+        syntheticRowsHidden: context.syntheticRowsHidden,
+      },
+      summary,
+      rows,
+      providerTotals: totals,
+      metric: opts.metric ? { name: opts.metric, value: metricValue(summary, opts.metric) } : null,
+      openrouter,
+    });
+    return;
+  }
+
+  if (opts.metric) {
+    renderMetricOutput(opts.metric, summary, opts.valueOnly);
+    return;
+  }
+
+  const openrouter = await loadOpenRouterSummary(context.config);
+
+  printHeader({ ...context, summary });
+
+  if (!rows.length) {
+    console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));
+  } else {
+    console.log(`\n${chalk.bold('Models')}`);
+    console.log(renderRowsTable(rows));
+    console.log(`\n${chalk.bold('Providers')}`);
+    console.log(renderProviderTotalsTable(totals));
+  }
+
+  const openRouterBlock = renderOpenRouterBlock(openrouter);
+  if (openRouterBlock) {
+    console.log(openRouterBlock);
+  }
+};
+
+const renderDailyCommand = async (opts) => {
+  const context = await loadUsageContext(opts);
+  const filteredRows = buildFilteredRows(context.records, opts);
+  const summary = summarizeRows(filteredRows);
+  const buckets = dailyBuckets(context.records, {
     providerFilter: opts.provider,
     modelFilter: opts.model,
   });
 
   if (opts.json) {
-    console.log(JSON.stringify(buckets, null, 2));
+    renderJson(buckets);
     return;
   }
 
-  printHeader({ from, to, configPath, allRecords, syntheticCount, includeSynthetic: opts.includeSynthetic });
+  printHeader({ ...context, summary });
 
   if (!buckets.length) {
     console.log(chalk.yellow('\nNo usage data found for that filter/window.'));
     return;
   }
 
-  console.log('\n' + chalk.bold('📅 Daily'));
+  console.log(`\n${chalk.bold('Daily')}`);
   console.log(renderDailyTable(buckets));
-});
+};
 
-program.addCommand(dailyCmd);
-
-// ── models subcommand ──────────────────────────────────────────────────────────
-
-const modelsCmd = new Command('models').description('Show usage grouped by model');
-addSharedOptions(modelsCmd);
-modelsCmd.option('--sort <field>', 'Sort by tokens_out|tokens_in|sessions|turns|cached_tokens|reasoning_tokens|model', 'tokens_out');
-modelsCmd.action(async (opts) => {
-  const { configPath, from, to, allRecords, syntheticCount, records } = await loadData(opts);
-
-  const filteredRows = aggregateRecords(records, {
-    providerFilter: opts.provider,
-    modelFilter: opts.model,
-    sortBy: opts.sort,
-  });
-
-  const rows = typeof opts.maxRows === 'number' && opts.maxRows > 0 ? filteredRows.slice(0, opts.maxRows) : filteredRows;
+const renderModelsCommand = async (opts) => {
+  const context = await loadUsageContext(opts);
+  const rows = buildFilteredRows(context.records, opts, opts.sort);
+  const summary = summarizeRows(rows);
 
   if (opts.json) {
-    console.log(JSON.stringify(rows, null, 2));
+    renderJson(rows);
     return;
   }
 
-  printHeader({ from, to, configPath, allRecords, syntheticCount, includeSynthetic: opts.includeSynthetic });
+  printHeader({ ...context, summary });
 
   if (!rows.length) {
     console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));
     return;
   }
 
-  console.log('\n' + chalk.bold('📊 Models'));
+  console.log(`\n${chalk.bold('Models')}`);
   console.log(renderRowsTable(rows));
-});
+};
 
-program.addCommand(modelsCmd);
-
-// ── providers subcommand ───────────────────────────────────────────────────────
-
-const providersCmd = new Command('providers').description('Show usage grouped by provider');
-addSharedOptions(providersCmd);
-providersCmd.action(async (opts) => {
-  const { configPath, from, to, allRecords, syntheticCount, records } = await loadData(opts);
-
-  const filteredRows = aggregateRecords(records, {
-    providerFilter: opts.provider,
-    modelFilter: opts.model,
-    sortBy: 'tokens_out',
-  });
-
+const renderProvidersCommand = async (opts) => {
+  const context = await loadUsageContext(opts);
+  const filteredRows = buildFilteredRows(context.records, opts);
+  const summary = summarizeRows(filteredRows);
   const totals = providerTotals(filteredRows);
 
   if (opts.json) {
-    console.log(JSON.stringify(totals, null, 2));
+    renderJson(totals);
     return;
   }
 
-  printHeader({ from, to, configPath, allRecords, syntheticCount, includeSynthetic: opts.includeSynthetic });
+  printHeader({ ...context, summary });
 
   if (!totals.length) {
     console.log(chalk.yellow('\nNo usage data found for that filter/window.'));
     return;
   }
 
-  console.log('\n' + chalk.bold('📦 Providers'));
+  console.log(`\n${chalk.bold('Providers')}`);
   console.log(renderProviderTotalsTable(totals));
-});
+};
 
-program.addCommand(providersCmd);
+const program = new Command();
 
-// ── parse ──────────────────────────────────────────────────────────────────────
+program
+  .name('llm-usage')
+  .description('Pretty terminal usage summaries for Claude Code, Codex, and OpenRouter')
+  .showHelpAfterError()
+  .enablePositionalOptions();
 
-await program.parseAsync(process.argv);
+addSortOption(
+  addCommonOptions(program)
+    .option(
+      '--metric <metric>',
+      `Single metric output: ${supportedMetrics.join('|')}`,
+      parseMetricName,
+    )
+    .option('--value-only', 'Print only the metric value')
+    .option('--print-config-example', 'Print example config and exit'),
+).action(renderRootCommand);
+
+const dailyCommand = addCommonOptions(new Command('daily').description('Show usage per calendar day')).action(
+  renderDailyCommand,
+);
+
+const modelsCommand = addSortOption(addCommonOptions(new Command('models').description('Show usage grouped by model'))).action(
+  renderModelsCommand,
+);
+
+const providersCommand = addCommonOptions(new Command('providers').description('Show usage grouped by provider')).action(
+  renderProvidersCommand,
+);
+
+program.addCommand(dailyCommand);
+program.addCommand(modelsCommand);
+program.addCommand(providersCommand);
+
+try {
+  await program.parseAsync(process.argv);
+} catch (error) {
+  console.error(chalk.red(error.message));
+  process.exit(1);
+}

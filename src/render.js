@@ -143,29 +143,6 @@ export function renderProviderTotalsTable(totals) {
   return table.toString();
 }
 
-export function renderSummaryTable(summary) {
-  const table = new Table({
-    head: ['Scope', 'Providers', 'Models', 'Sessions', 'Turns', 'In', 'Out', 'Total', 'Cached', 'Reasoning'],
-    style: { head: ['yellow'], border: ['grey'] },
-    colAligns: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
-  });
-
-  table.push([
-    'selected',
-    formatNumber(summary.providers),
-    formatNumber(summary.models),
-    formatNumber(summary.sessions),
-    formatNumber(summary.turns),
-    formatCompact(summary.tokens_in),
-    formatCompact(summary.tokens_out),
-    formatCompact(summary.tokens_total),
-    formatCompact(summary.cached_tokens),
-    formatCompact(summary.reasoning_tokens),
-  ]);
-
-  return table.toString();
-}
-
 export function formatMetricValue(metric, summary, compact = true) {
   const n = Number(summary?.[metric] || 0);
   const tokenMetrics = new Set([
@@ -214,18 +191,6 @@ export function renderOpenRouterBlock(orData) {
     colAligns: ['left', 'left'],
   });
 
-  if (orData.disabled) {
-    table.push(['status', 'disabled']);
-    return `\n${table.toString()}`;
-  }
-
-  if (orData.missingApiKey) {
-    table.push(['status', `missing API key env: ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}`]);
-    table.push(['hint', `export ${orData.apiKeyEnv || 'OPENROUTER_API_KEY'}=...`]);
-    table.push(['note', openRouterModelBreakdownNote]);
-    return `\n${table.toString()}`;
-  }
-
   if (orData.key) {
     const limit = pickResponseValue(orData.key, [['limit'], ['rate_limit'], ['rateLimit'], ['limits', 'limit']]);
     const usage = pickResponseValue(orData.key, [['usage'], ['used'], ['requests'], ['request_count']]);
@@ -251,7 +216,7 @@ export function renderOpenRouterBlock(orData) {
   }
   if (orData.creditsError) table.push(['credits status', `error: ${orData.creditsError}`]);
 
-  if (table.length === 0) {
+  if (!table.length) {
     table.push(['status', 'no data returned']);
   }
 

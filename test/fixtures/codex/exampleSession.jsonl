@@ -1,0 +1,4 @@
+{"timestamp":"2026-03-09T23:55:00.000Z","type":"turn_context","payload":{"model":"gpt-5.4"}}
+{"timestamp":"2026-03-09T23:55:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":50,"cached_input_tokens":5,"output_tokens":20,"reasoning_output_tokens":5,"total_tokens":80}}}}
+{"timestamp":"2026-03-10T11:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":40,"reasoning_output_tokens":10,"total_tokens":170}}}}
+{"timestamp":"2026-03-10T11:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":160,"cached_input_tokens":30,"output_tokens":70,"reasoning_output_tokens":15,"total_tokens":275}}}}

@@ -1,6 +1,16 @@
 import os from 'node:os';
 import path from 'node:path';
 
+export const supportedSortFields = [
+  'tokens_in',
+  'tokens_out',
+  'sessions',
+  'turns',
+  'cached_tokens',
+  'reasoning_tokens',
+  'model',
+];
+
 export function expandHome(inputPath) {
   if (!inputPath) return inputPath;
   if (inputPath === '~') return os.homedir();
@@ -56,8 +66,7 @@ export function inRange(date, from, to) {
 }
 
 export function sortRows(rows, key = 'tokens_out') {
-  const valid = new Set(['tokens_in', 'tokens_out', 'sessions', 'turns', 'cached_tokens', 'reasoning_tokens', 'model']);
-  const sortKey = valid.has(key) ? key : 'tokens_out';
+  const sortKey = supportedSortFields.includes(key) ? key : 'tokens_out';
 
   return [...rows].sort((a, b) => {
     if (sortKey === 'model') return String(a.model).localeCompare(String(b.model));

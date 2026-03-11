@@ -1,17 +1,8 @@
-export async function fetchOpenRouterSummary({ enabled, apiKey, apiKeyEnv = 'OPENROUTER_API_KEY', baseUrl }) {
-  if (!enabled) {
-    return {
-      provider: 'openrouter',
-      disabled: true,
-    };
-  }
+const buildEndpoint = (baseUrl, pathName) => `${baseUrl.replace(/\/$/, '')}${pathName}`;
 
-  if (!apiKey) {
-    return {
-      provider: 'openrouter',
-      missingApiKey: true,
-      apiKeyEnv,
-    };
+export async function fetchOpenRouterSummary({ enabled, apiKey, baseUrl }) {
+  if (!enabled || !apiKey) {
+    return null;
   }
 
   const headers = {
@@ -22,7 +13,7 @@ export async function fetchOpenRouterSummary({ enabled, apiKey, apiKeyEnv = 'OPE
   const out = { provider: 'openrouter' };
 
   try {
-    const keyRes = await fetch(`${baseUrl.replace(/\/$/, '')}/key`, { headers });
+    const keyRes = await fetch(buildEndpoint(baseUrl, '/key'), { headers });
     if (keyRes.ok) {
       out.key = await keyRes.json();
     } else {
@@ -33,7 +24,7 @@ export async function fetchOpenRouterSummary({ enabled, apiKey, apiKeyEnv = 'OPE
   }
 
   try {
-    const creditsRes = await fetch(`${baseUrl.replace(/\/$/, '')}/credits`, { headers });
+    const creditsRes = await fetch(buildEndpoint(baseUrl, '/credits'), { headers });
     if (creditsRes.ok) {
       out.credits = await creditsRes.json();
     } else {

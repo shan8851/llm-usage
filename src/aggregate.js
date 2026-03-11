@@ -1,19 +1,15 @@
 import { sortRows } from './utils.js';
+import { buildRecordFilters, matchesRecordFilters, normalizeModel, normalizeProvider } from './filtering.js';
 
 export function dailyBuckets(records, { providerFilter, modelFilter } = {}) {
-  const providerAllow = providerFilter
-    ? new Set(providerFilter.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))
-    : null;
-  const modelNeedle = modelFilter?.trim().toLowerCase() || null;
-
+  const filters = buildRecordFilters({ providerFilter, modelFilter });
   const map = new Map(); // YYYY-MM-DD -> bucket
 
   for (const r of records) {
-    const provider = String(r.provider || 'unknown').toLowerCase();
-    const model = String(r.model || 'unknown');
+    const provider = normalizeProvider(r.provider);
+    const model = normalizeModel(r.model);
 
-    if (providerAllow && !providerAllow.has(provider)) continue;
-    if (modelNeedle && !model.toLowerCase().includes(modelNeedle)) continue;
+    if (!matchesRecordFilters({ provider, model }, filters)) continue;
 
     const ts = r.timestamp instanceof Date ? r.timestamp : new Date(r.timestamp);
     if (Number.isNaN(ts.getTime())) continue;
@@ -62,21 +58,15 @@ export const supportedMetrics = [
   'models',
 ];
 
-export function aggregateRecords(records, { providerFilter, modelFilter, sortBy, maxRows }) {
+export function aggregateRecords(records, { providerFilter, modelFilter, sortBy } = {}) {
   const map = new Map();
-
-  const providerAllow = providerFilter
-    ? new Set(providerFilter.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))
-    : null;
-
-  const modelNeedle = modelFilter?.trim().toLowerCase() || null;
+  const filters = buildRecordFilters({ providerFilter, modelFilter });
 
   for (const r of records) {
-    const provider = String(r.provider || 'unknown').toLowerCase();
-    const model = String(r.model || 'unknown');
+    const provider = normalizeProvider(r.provider);
+    const model = normalizeModel(r.model);
 
-    if (providerAllow && !providerAllow.has(provider)) continue;
-    if (modelNeedle && !model.toLowerCase().includes(modelNeedle)) continue;
+    if (!matchesRecordFilters({ provider, model }, filters)) continue;
 
     const key = `${provider}|||${model}`;
     if (!map.has(key)) {
@@ -112,11 +102,10 @@ export function aggregateRecords(records, { providerFilter, modelFilter, sortBy,
     ...r,
     sessions: r.sessionsSet.size,
     session_ids: [...r.sessionsSet],
-    sessionsSet: undefined,
+      sessionsSet: undefined,
   }));
 
-  const sorted = sortRows(rows, sortBy);
-  return typeof maxRows === 'number' && maxRows > 0 ? sorted.slice(0, maxRows) : sorted;
+  return sortRows(rows, sortBy);
 }
 
 export function scopeTotals(rows) {

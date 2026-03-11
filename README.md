@@ -190,13 +190,20 @@ Reads cumulative `token_count` events and computes per-event deltas for:
 
 Loose ideas — no promises, no timeline:
 
-- Subcommands (`daily`, `models`, `providers`, `sessions`) for focused views
-- Per-day breakdown table
 - Cost estimates per model (hardcoded pricing table)
 - Sparklines / mini charts in terminal
 - CSV / plain output for piping
 - Interactive TUI mode (drill-down, live refresh)
 - More provider adapters (Gemini, local Ollama logs, etc.)
+- `sessions` subcommand with per-session drill-down
+
+---
+
+## Contributing
+
+PRs welcome. No formal process — just open an issue or PR and we'll figure it out.
+
+If you want to add a new provider adapter, check `src/parse-claude.js` or `src/parse-codex.js` for the pattern. Return an array of record objects and the rest just works.
 
 ---
 

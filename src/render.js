@@ -11,6 +11,13 @@ function colourProvider(provider) {
   return provider;
 }
 
+function colourOut(rawValue) {
+  const formatted = formatCompact(rawValue);
+  if (rawValue >= 1_000_000) return chalk.red(formatted);
+  if (rawValue >= 100_000) return chalk.yellow(formatted);
+  return chalk.green(formatted);
+}
+
 function coerceFiniteNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
 
@@ -104,7 +111,7 @@ export function renderRowsTable(rows) {
       formatNumber(row.sessions),
       formatNumber(row.turns),
       formatCompact(row.tokens_in),
-      formatCompact(row.tokens_out),
+      colourOut(row.tokens_out),
       formatCompact(row.cached_tokens),
       formatCompact(row.reasoning_tokens),
       row.last_seen ? row.last_seen.toISOString().replace('T', ' ').slice(0, 19) : '-',

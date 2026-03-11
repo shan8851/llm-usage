@@ -1,5 +1,11 @@
 # llm-usage
 
+[![npm version](https://img.shields.io/npm/v/llm-usage.svg)](https://www.npmjs.com/package/llm-usage)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![node](https://img.shields.io/node/v/llm-usage.svg)](https://nodejs.org)
+
+> See where your tokens actually go. One command, all providers.
+
 Pretty terminal usage summaries for Claude Code, Codex, and OpenRouter.
 
 Default output is a clean table with:
@@ -16,7 +22,7 @@ Default output is a clean table with:
 
 ---
 
-## Features (v0)
+## Features
 
 - Parses **Claude Code local logs** (`~/.claude/projects` and `~/.config/claude/projects`)
 - Parses **Codex local logs** (`~/.codex/sessions`)
@@ -48,7 +54,7 @@ npx llm-usage --from 7d
 ### Local development
 
 ```bash
-git clone https://github.com/<you>/llm-usage.git
+git clone https://github.com/shan8851/llm-usage.git
 cd llm-usage
 npm install
 npm run dev -- --from 7d
@@ -59,6 +65,23 @@ npm run dev -- --from 7d
 ```bash
 npm link
 llm-usage --from 30d
+```
+
+---
+
+## Quick start
+
+<!-- TODO: add terminal screenshot here -->
+
+```bash
+# See everything from the last 7 days
+llm-usage --from 7d
+
+# Just the totals — great for a quick sanity check
+llm-usage --from 7d --totals-only
+
+# Pull a single metric value (pipe-friendly)
+llm-usage --from 7d --metric tokens_total --value-only
 ```
 
 ---
@@ -165,9 +188,10 @@ Reads cumulative `token_count` events and computes per-event deltas for:
 
 ## Roadmap
 
-- v0.2: sparkline/mini charts
-- v0.3: richer subcommands (`models`, `providers`, `sessions`)
-- v0.4: optional interactive TUI mode
+- **v0.2** — sparklines + mini charts inside the table
+- **v0.3** — richer subcommands: `models`, `providers`, `sessions`
+- **v0.4** — interactive TUI mode (live refresh, drill-down)
+- **v1.0** — cost estimates per provider
 
 ---
 

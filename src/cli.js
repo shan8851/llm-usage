@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, exampleConfigToml } from './config.js';
-import { parseTime } from './utils.js';
+import { parseTime, formatCompact, formatNumber } from './utils.js';
 import { collectClaudeRows } from './parse-claude.js';
 import { collectCodexRows } from './parse-codex.js';
 import { aggregateRecords, metricValue, providerTotals, summarizeRows, supportedMetrics } from './aggregate.js';
@@ -77,6 +77,21 @@ const rows = typeof opts.maxRows === 'number' && opts.maxRows > 0 ? filteredRows
 const totals = providerTotals(rows);
 const scopeProviderTotals = providerTotals(filteredRows);
 const summary = summarizeRows(filteredRows);
+
+const printStyledHeader = () => {
+  const separator = chalk.grey('─'.repeat(60));
+  console.log(chalk.bold.whiteBright('\n⚡ llm-usage'));
+  console.log(separator);
+  console.log(chalk.dim(`window: ${from.toISOString()} → ${to.toISOString()}`));
+  console.log(chalk.dim(`config: ${configPath}`));
+  console.log(chalk.dim(`records parsed: ${allRecords.length}`));
+  if (!opts.includeSynthetic && syntheticCount > 0) {
+    console.log(chalk.dim(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
+  }
+  const headlineStat = `${formatCompact(summary.tokens_total)} tokens across ${formatNumber(summary.sessions)} sessions (${summary.models} models)`;
+  console.log('\n' + chalk.bold(headlineStat));
+};
+
 const compactTextMode = !opts.json && (Boolean(opts.metric) || opts.totalsOnly);
 const selectedMetricValue = opts.metric ? metricValue(summary, opts.metric) : null;
 
@@ -127,23 +142,20 @@ if (opts.metric) {
 }
 
 if (opts.totalsOnly) {
-  console.log(renderSummaryTable(summary));
+  printStyledHeader();
+  console.log('\n' + renderSummaryTable(summary));
   process.exit(0);
 }
 
-console.log(chalk.bold(`\nLLM Usage`));
-console.log(chalk.grey(`window: ${from.toISOString()} → ${to.toISOString()}`));
-console.log(chalk.grey(`config: ${configPath}`));
-console.log(chalk.grey(`records parsed: ${allRecords.length}`));
-if (!opts.includeSynthetic && syntheticCount > 0) {
-  console.log(chalk.grey(`synthetic rows hidden: ${syntheticCount} (use --include-synthetic to show)`));
-}
+printStyledHeader();
 
 if (!filteredRows.length) {
   console.log(chalk.yellow('\nNo usage rows found for that filter/window.'));
 } else {
-  console.log('\n' + renderRowsTable(rows));
-  console.log('\n' + renderProviderTotalsTable(totals));
+  console.log('\n' + chalk.bold('📊 Models'));
+  console.log(renderRowsTable(rows));
+  console.log('\n' + chalk.bold('📦 Providers'));
+  console.log(renderProviderTotalsTable(totals));
 }
 
 const orBlock = renderOpenRouterBlock(orData);
